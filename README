@@ -1,0 +1,77 @@
+# Instructions
+In command line:
+1. make
+2. .\sim_cache <BLOCKSIZE> <L1_SIZE> <L1_ASSOC> <L2_SIZE> <L2_ASSOC> <REPLACEMENT_POLICY> <INCLUSION_PROPERTY> <TRACE_FILE>
+
+HW Example: .\sim_cache 32 8192 4 262144 8 0 0 traces\gcc_trace.txt 
+Test: .\sim_cache 1 16 4 32 4 0 0 traces\test_trace.txt
+
+
+
+# TODO
+Add "dirty" block (idk what that means but its in the validation txt)
+Fix count not updating
+PDF report
+
+
+
+# Policies
+Replacement:
+- LRU (0): Replace block that was least recently touched.
+- FIFO (1): Replace block that was placed first in cache.
+- Optimal (2): Replace block that will be needed furthest in the future.
+Inclusion:
+- Non-inclusive (0): L2 includes L1, but not strictly.
+- Inclusive (1): L2 must include all of L1. If a block in L2 is evicted, do the same for L1 (if it exists).
+
+
+
+# Requirements
+The output from your simulator includes the memory hierarchy
+configuration and trace filename, the final contents of all caches, and all
+required measurements.
+
+The output from your simulator matches EXACTLY both the formatting
+and numerical values of the posted validation runs. The only exception is
+that you are permitted a variable amount of whitespace (tabs and
+spaces), although newlines must match (i.e., no extra lines).
+
+You explicitly confirmed that your outputs match EXACTLY (except for
+tabs and spaces) the posted validation runs, by running the command
+“diff –iw …” as explained in the spec.
+
+You can just type “make” to build your simulator (via your Makefile)
+
+The simulator built by the Makefile actually runs correctly (some students
+introduce the Makefile at the last minute and don’t actually test the
+simulator version built by it – don’t make this mistake)
+
+The compiled simulator is called “sim_cache”
+
+Your simulator “sim_cache” takes in arguments as specified in the spec:
+sim_cache
+<BLOCKSIZE> <L1_SIZE> <L1_ASSOC> <L2_SIZE> <L2_ASSOC>
+<REPLACEMENT_POLICY> <INCLUSION_PROPERTY> <trace_file>
+
+Your simulator prints output to the console (i.e., screen) only
+
+You have been vigilant about taking certain precautions: keeping backups,
+not touching files after the submission deadline (to keep timestamps
+valid, just in case we need to revisit the original files), etc.
+
+Submit only a single zip file
+
+The name of your submitted zip file is “mp1.zip”
+
+The size of your submitted zip file is less than 1MB (if you need to go over
+by a little bit, keep it reasonable.)
+
+Include all the necessary files in your mp1.zip submission:
+* Source code files
+* Makefile
+* Report called “report.pdf”
+
+Report is named “report.pdf” (PDF)
+
+Report consists of the provided cover page (with your name, signed
+Honor Pledge, etc.) and required content as explained in the spec.

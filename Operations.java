@@ -11,250 +11,194 @@ class Operations {
 	int replace = 0;
 	int inclusion = 0;
 
-	int l1Reads = 0;
-	int l1ReadMiss = 0;
-	int l1Writes = 0;
-	int l1WriteMiss = 0;
-	int l1Writebacks = 0;
-
-	int l2Reads = 0;
-	int l2ReadMiss = 0;
-	int l2Writes = 0;
-	int l2WriteMiss = 0;
-	int l2Writebacks = 0;
-
-	int totalTraffic = 0;
-
 	// Create arrays for caches
 	public Operations(int b, int s1, int s2, int a1, int a2, int rep, int incl) {
-		cache1 = new Cache(b, s1, a1);
-		cache2 = new Cache(b, s2, a2);
+		cache2 = new Cache(b, s2, a2, rep, "L2");
+		if (s2 > 0) {
+			cache1 = new Cache(b, s1, a1, rep, "L1", cache2);
+		} else {
+			cache1 = new Cache(b, s1, a1, rep, "L1");
+		}
 		replace = rep;
 		inclusion = incl;
+
+		if (rep == 2) {
+			optimalStore = new HashMap<String, ArrayList<Integer>>();
+		}
 	}
 
 
-	// Search for what cache the address is saved to
-	public void read(String adr) {
-		int[] found = cache1.find(adr);
-		// Found in L1
-		if (found[0] != -1) {
-			// If LRU, touch block
-			if (replace == 0 && cache1.blocks[found[0]][found[1]].count != 0) {
-				// Don't increase any block with a check above that of the current block
-				// Stops check from going above current amount of total amount of blocks in the cache
-				int threshold = cache1.blocks[found[0]][found[1]].count;
-				for (int i = 0; i < cache1.blocks.length; i++) {
-					for (int j = 0; j < cache1.blocks[i].length; j++) {
-						if (cache1.blocks[i][j] != null && cache1.blocks[i][j].count < threshold) {
-							cache1.blocks[i][j].inc();
-						}
-					}
-				}
-				cache1.blocks[found[0]][found[1]].setCount(0);
-			}
-			else if (replace == 2) {
-				// Change count when touched
-				if (optimalStore.get(cache1.getTag(adr)).size() == 0) {
-					cache1.blocks[found[0]][found[1]].setCount(Integer.MAX_VALUE);
-				} else {
-					cache1.blocks[found[0]][found[1]].setCount(optimalStore.get(cache1.getTag(adr)).get(0));
-					optimalStore.get(cache1.getTag(adr)).remove(0);
-				}
-			}
-			System.out.print("Found in L1 ");
-			l1Reads++;
+	public int optimalPop(String adr) {
+		int result = -1;
+		if (!optimalStore.containsKey(cache1.getTag(adr))) {
+			result = Integer.MAX_VALUE;
 		} else {
-			l1ReadMiss++;
+			result = optimalStore.get(cache1.getTag(adr)).get(0);
+			optimalStore.get(cache1.getTag(adr)).remove(0);
 		}
-
-		found = cache2.find(adr);
-		// Found in L2
-		if (found[0] != -1) {
-			// If LRU, touch block
-			if (replace == 0 && cache2.blocks[found[0]][found[1]].count != 0) {
-				// Don't increase any block with a check above that of the current block
-				// Stops check from going above current amount of total amount of blocks in the cache
-				int threshold = cache2.blocks[found[0]][found[1]].count;
-				for (int i = 0; i < cache2.blocks.length; i++) {
-					for (int j = 0; j < cache2.blocks[i].length; j++) {
-						if (cache2.blocks[i][j] != null && cache2.blocks[i][j].count < threshold) {
-							cache2.blocks[i][j].inc();
-						}
-					}
-				}
-				cache2.blocks[found[0]][found[1]].setCount(0);
-			}
-			// If Optimal, change count when touched
-			else if (replace == 2) {
-				if (optimalStore.get(cache2.getTag(adr)).size() == 0) {
-					cache2.blocks[found[0]][found[1]].setCount(Integer.MAX_VALUE);
-				} else {
-					cache2.blocks[found[0]][found[1]].setCount(optimalStore.get(cache2.getTag(adr)).get(0));
-					optimalStore.get(cache2.getTag(adr)).remove(0);
-				}
-			}
-			System.out.print("Found in L2 ");
-			l2Reads++;
-		} else {
-			l2ReadMiss++;
-		}
-		System.out.println();
-	}
-
-
-	// Find the largest count to replace. Works for all replace policies
-	public String findNext(Cache cache) {
-		int largest = 0;
-		String result = "";
-
-		for (int i = 0; i < cache.blocks.length; i++) {
-			for (int j = 0; j < cache.blocks[i].length; j++) {
-				if (cache.blocks[i][j].count > largest) {
-					result = cache.blocks[i][j].address;
-					largest = cache.blocks[i][j].count;
-				}
-			}
-		}
-
 		return result;
 	}
 
-	// Write address to a cache. If empty, just add. If full, replace one block (See 3.3)
-	public void write(String adr) {
-		boolean isFound = false;
-
-		int[] found1 = cache1.find(adr);
-		System.out.print("Cache1 full? " + cache1.setFull(adr));
-		// Found in L1
-		if (!cache1.setFull(adr) || found1[0] != -1) {
-			// If LRU, touch block
-			int threshold = (found1[0] == -1) ? 0 : cache1.blocks[found1[0]][found1[1]].count;
-			if (replace != 2) {
-				// Touch each block, then add new address
-				for (int i = 0; i < cache1.blocks.length; i++) {
-					for (int j = 0; j < cache1.blocks[i].length; j++) {
-						if (cache1.blocks[i][j] != null && cache1.blocks[i][j].count < threshold) {
-							cache1.blocks[i][j].inc();
-						}
-					}
-				}
-
-				if (found1[0] != -1) {
-					// If block was found before, make it dirty
-					cache1.blocks[found1[0]][found1[1]].setCount(0);
-					cache1.blocks[found1[0]][found1[1]].toggleDirty();
-				} else {
-					cache1.insert(adr, 0);
-				}
-			} else {
-				// Change count when touched
-				if (found1[0] != -1) {
-					if (optimalStore.get(cache1.getTag(adr)).size() == 0) {
-						cache1.blocks[found1[0]][found1[1]].setCount(Integer.MAX_VALUE);
-					} else {
-						cache1.blocks[found1[0]][found1[1]].setCount(optimalStore.get(cache1.getTag(adr)).get(0));
-						optimalStore.get(cache1.getTag(adr)).remove(0);
-					}
-					cache1.blocks[found1[0]][found1[1]].toggleDirty();
-				} else {
-					if (optimalStore.get(cache1.getTag(adr)).size() == 0) {
-						cache1.insert(adr, Integer.MAX_VALUE);
-					} else {
-						cache1.insert(adr, optimalStore.get(cache1.getTag(adr)).get(0));
-						optimalStore.get(cache1.getTag(adr)).remove(0);
-					}
-				}
-			}
-			System.out.print("Placed in L1 ");
-			l1Writes++;
-			isFound = true;
+	public int optimalRead(String adr) {
+		int result = -1;
+		if (!optimalStore.containsKey(cache1.getTag(adr))) {
+			result = Integer.MAX_VALUE;
 		} else {
-			l1WriteMiss++;
-			l1ReadMiss++;
+			result = optimalStore.get(cache1.getTag(adr)).get(0);
+		}
+		return result;
+	}
+
+	// Search for what cache the address is saved to
+	public void read(String adr) {
+		// May need to make hit1 and hit2 and move to bottom
+		boolean hit = false;
+
+		// If LRU, touch every block
+		if (replace != 2) {
+			hit = cache1.read(adr);
+		}
+		// If FIFO, do nothing
+		// If optimal, change count when touched
+		else {
+			hit = cache1.read(adr, optimalRead(adr));
 		}
 
-		int[] found2 = cache2.find(adr);
-		// Found in L1
-		if (!cache2.setFull(adr) || found2[0] != -1) {
-			// If LRU, touch block
-			int threshold = (found2[0] == -1) ? 0 : cache2.blocks[found2[0]][found2[1]].count;
-			if (replace != 2) {
-				// Touch each block, then add new address
-				for (int i = 0; i < cache2.blocks.length; i++) {
-					for (int j = 0; j < cache2.blocks[i].length; j++) {
-						if (cache2.blocks[i][j] != null && cache2.blocks[i][j].count < threshold) {
-							cache2.blocks[i][j].inc();
-						}
-					}
-				}
-
-				if (found2[0] != -1) {
-					// If block was found before, make it dirty
-					cache2.blocks[found2[0]][found2[1]].setCount(0);
-					cache2.blocks[found2[0]][found2[1]].toggleDirty();
-				} else {
-					cache2.insert(adr, 0);
-				}
+		if (hit) {
+			System.out.println("Found in L1 ");
+			return;
+		}  else {
+			if (replace == 0) {
+				cache1.updateCount(adr); 
+				cache1.allocate(adr, false);
+			} else if (replace == 1) {
+				cache1.allocate(adr, false);
 			} else {
-				// Change count when touched
-				if (found2[0] != -1) {
-					if (optimalStore.get(cache2.getTag(adr)).size() == 0) {
-						cache2.blocks[found2[0]][found2[1]].setCount(Integer.MAX_VALUE);
-					} else {
-						cache2.blocks[found2[0]][found2[1]].setCount(optimalStore.get(cache2.getTag(adr)).get(0));
-						optimalStore.get(cache2.getTag(adr)).remove(0);
-					}
-					cache2.blocks[found2[0]][found2[1]].toggleDirty();
-				} else {
-					if (optimalStore.get(cache2.getTag(adr)).size() == 0) {
-						cache2.insert(adr, Integer.MAX_VALUE);
-					} else {
-						cache2.insert(adr, optimalStore.get(cache2.getTag(adr)).get(0));
-						optimalStore.get(cache2.getTag(adr)).remove(0);
-					}
-				}
+				cache1.allocate(adr, optimalPop(adr), false);
 			}
-			System.out.print("Placed in L2 ");
-			l2Writes++;
-			isFound = true;
+		}
+
+		// Write victim block to lower level
+		if (cache1.victim != "") {
+			cache2.write(cache1.victim);
+			cache1.victim = "";
+		}
+
+		// --- Check L2 ---
+
+		// If LRU, touch every block
+		if (replace != 2) {
+			hit = cache2.read(adr);
+		}
+		// If FIFO, do nothing
+		// If optimal, change count when touched
+		else {
+			hit = cache2.read(adr, optimalRead(adr));
+		}
+
+		if (hit) {
+			System.out.println("Found in L2 ");
+			return;
 		} else {
-			l2WriteMiss++;
-			l2ReadMiss++;
+			if (replace == 0) {
+				cache2.updateCount(adr); 
+				cache2.allocate(adr, false);
+			} else if (replace == 1) {
+				cache2.allocate(adr, false);
+			} else {
+				cache2.allocate(adr, optimalPop(adr), false);
+			}
+		}
+		// If didn't find before and non-inclusive, allocate to L1
+		// else if (inclusion == 0) {
+		// 	if (replace == 0) { cache1.updateCount(adr); cache1.allocate(adr, false); }
+		// 	else if (replace == 1) { cache1.allocate(adr, false); }
+		// 	else { cache1.allocate(adr, optimalPop(adr), false); }
+		// }
+		// // Otherwise allocate to L2 also
+		// else {
+		// 	if (replace == 0) { cache2.updateCount(adr); cache2.allocate(adr, false); }
+		// 	else if (replace == 1) { cache2.allocate(adr, false); }
+		// 	else { cache2.allocate(adr, optimalPop(adr), false); }
+		// }
+
+		if (cache2.victim != "") {
+			// System.out.println("L2 victim : " + cache2.printAddress(cache2.victim));
+			cache2.victim = "";
+		}
+	}
+
+
+	// Write address to a cache. If empty, just add. If full, replace one block (See 3.3)
+	public void write(String adr) {
+		boolean hit = false;
+
+		// If LRU or FIFO, touch every block
+		if (replace != 2) {
+			hit = cache1.write(adr);
+		}
+		// If optimal, change count when touched
+		else {
+			hit = cache1.write(adr, optimalRead(adr));
+		}
+
+		if (hit) {
+			if (replace == 2) { optimalPop(adr); }
+			return;
+		}
+		System.out.println("Placed in L1 ");
+
+		// Write victim block to lower level
+		if (cache1.victim != "") {
+			// System.out.println("L1 victim : " + cache1.printAddress(cache1.victim));
+			cache2.write(cache1.victim);
+			cache1.victim = "";
+		}
+
+		if (inclusion == 0) { 
+			cache2.updateCount(adr);
+			hit = cache2.read(adr);
+			if (!hit) {
+				cache2.allocate(adr, false);
+			}
+			return;
+		} 
+
+		// --- Check L2 ---
+
+		// If LRU or FIFO, touch every block
+		if (replace != 2) {
+			hit = cache2.write(adr);
+		}
+		// If optimal, change count when touched
+		else {
+			hit = cache2.write(adr, optimalRead(adr));
+		}
+
+		if (hit) {
+			System.out.println("Placed in L2 ");
+			if (inclusion == 1) { cache1.allocate(adr, true); } 
+			else if (replace == 2) { optimalPop(adr);	}
 		}
 
 		// CHECK IF THIS IS CORRECT --------
-		if (!isFound) {
+		if (!hit) {
 			String tempReplace = "";
 			// Non-inclusive
 			// Note: The evicted block may not be the same in both caches and thats ok
 			if (inclusion == 0) {
-				if (found1[0] != -1) {
-					tempReplace = findNext(cache1);
-					cache1.replace(adr, tempReplace);
-				}
-				if (found2[0] != -1) {
-					tempReplace = findNext(cache2);
-					cache2.replace(adr, tempReplace);
-				}
+				cache1.allocate(adr, true);
 			} 
 			// Inclusive
 			// The evicted block must be the same in L1 and L2
 			else {
 				// Check L2 first. If not there, replace from L2 and L1
-				if (cache2.blocks.length > 0 && found2[0] != -1) {
-					tempReplace = findNext(cache2);
-					cache1.replace(adr, tempReplace);
-					cache2.replace(adr, tempReplace);
-				}
-				else if (found1[0] != -1) {
-					tempReplace = findNext(cache1);
-					cache1.replace(adr, tempReplace);
-				}
+				cache2.allocate(adr, true);
+				// TODO
+				cache1.replace(adr, cache2.blocks[cache2.getIndex(adr)][cache2.find(adr)].tag, true);
 			}
 			System.out.println("Replace " + tempReplace + " with " + adr);
 		}
-		System.out.println();
 	}
 
 
@@ -268,7 +212,7 @@ class Operations {
 		}
 
 		// Store distance between when it was last seen
-		if (optimalStore.get(adr) != null) {
+		if (optimalStore.containsKey(adr)) {
 			// Found address in optimal
 			optimalStore.get(adr).add(count);
 		} else {
@@ -291,21 +235,32 @@ class Operations {
 	public void outputCaches() {
 		System.out.println("===== L1 contents =====");
 		for (int i = 0; i < cache1.blocks.length; i++) {
-			System.out.print("Set     " + i + ": ");
+			System.out.printf("Set     %5s ", (String.valueOf(i) + ":"));
 			for (int j = 0; j < cache1.blocks[i].length; j++) {
 				if (cache1.blocks[i][j] != null) {
-					System.out.print(cache1.blocks[i][j].blockString() + " ");
+					String[] st = cache1.blocks[i][j].blockString();
+					if (j == cache1.blocks[i].length-1) {
+						System.out.printf("%6s %s %5s", st[0], st[1], st[2]);
+					} else {
+						System.out.printf("%6s %s %5s, ", st[0], st[1], st[2]);
+					}
 				}
 			}
 			System.out.println();
 		}
 
+		if (cache2.blocks.length == 0) { return; }
 		System.out.println("===== L2 contents =====");
 		for (int i = 0; i < cache2.blocks.length; i++) {
-			System.out.print("Set     " + i + ": ");
+			System.out.print("Set     " + i + ":     ");
 			for (int j = 0; j < cache2.blocks[i].length; j++) {
 				if (cache2.blocks[i][j] != null) {
-					System.out.print(cache2.blocks[i][j].blockString() + " ");
+					String[] st = cache2.blocks[i][j].blockString();
+					if (j == cache2.blocks[i].length-1) {
+						System.out.printf("%6s %s %5s", st[0], st[1], st[2]);
+					} else {
+						System.out.printf("%6s %s %5s,  ", st[0], st[1], st[2]);
+					}
 				}
 			}
 			System.out.println();
@@ -313,28 +268,29 @@ class Operations {
 	}
 
 	public void results() {
-		float l1MissRate = (l1ReadMiss + l1WriteMiss) / (l1Reads + l1Writes);
-		float l2MissRate = (l2Reads == 0) ? 0 : l2ReadMiss / l2Reads;
+		float l1MissRate = (float)(cache1.readMiss + cache1.writeMiss) / (float)(cache1.reads + cache1.writes);
+		float l2MissRate = (cache2.reads == 0) ? 0 : ((float)cache2.readMiss / (float)cache2.reads);
+		int totalTraffic = cache2.readMiss + cache2.writeMiss + cache2.writebacks + cache1.mainTraffic;
 
 		// System.out.println("%d %d %d %d %f %d %d %d %d %d %f %d %d\n",
-		// 	l1Reads, l1ReadMiss, l1Writes, l1WriteMiss, l1MissRate, l1Writebacks,
-		// 	l2Reads, l2ReadMiss, l2Writes, l2WriteMiss, l2MissRate, l2Writebacks,
+		// 	cache1.reads, cache1.readMiss, cache1.writes, cache1.writeMiss, l1MissRate, l1Writebacks,
+		// 	cache2.reads, cache2.readMiss, l2Writes, l2WriteMiss, l2MissRate, l2Writebacks,
 		// 	totalTraffic);
 		System.out.println("===== Simulation results (raw) =====");
-		System.out.println("a. number of L1 reads:        " + l1Reads);
-		System.out.println("b. number of L1 read misses: 	" + l1ReadMiss);
-		System.out.println("c. number of L1 writes: 		  " + l1Writes);
-		System.out.println("d. number of L1 write misses: " + l1WriteMiss);
-		System.out.println("e. L1 miss rate: 							" + l1MissRate);
-		System.out.println("f. number of L1 writebacks: 	" + l1Writebacks);
+		System.out.println("a. number of L1 reads:        " + cache1.reads);
+		System.out.println("b. number of L1 read misses:  " + cache1.readMiss);
+		System.out.println("c. number of L1 writes:       " + cache1.writes);
+		System.out.println("d. number of L1 write misses: " + cache1.writeMiss);
+		System.out.printf ("e. L1 miss rate:              %.6f\n" + l1MissRate);
+		System.out.println("f. number of L1 writebacks:   " + cache1.writebacks);
 
-		System.out.println("g. number of L2 reads: 				" + l2Reads);
-		System.out.println("h. number of L2 read misses: 	" + l2ReadMiss);
-		System.out.println("i. number of L2 writes: 			" + l2Writes);
-		System.out.println("j. number of L2 write misses: " + l2WriteMiss);
-		System.out.println("k. L2 miss rate: 							" + l2MissRate);
-		System.out.println("l. number of L2 writebacks: 	" + l2Writebacks);
+		System.out.println("g. number of L2 reads:        " + cache2.reads);
+		System.out.println("h. number of L2 read misses:  " + cache2.readMiss);
+		System.out.println("i. number of L2 writes:       " + cache2.writes);
+		System.out.println("j. number of L2 write misses: " + cache2.writeMiss);
+		System.out.printf ("k. L2 miss rate:              %.6f\n" + l2MissRate);
+		System.out.println("l. number of L2 writebacks:   " + cache2.writebacks);
 
-		System.out.println("m. total memory traffic: 			" + totalTraffic);
+		System.out.println("m. total memory traffic:      " + totalTraffic);
 	}
 }

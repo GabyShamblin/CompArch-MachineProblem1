@@ -1,21 +1,19 @@
-# Instructions
+## Instructions
 In command line:
 1. make
-2. .\sim_cache <BLOCKSIZE> <L1_SIZE> <L1_ASSOC> <L2_SIZE> <L2_ASSOC> <REPLACEMENT_POLICY> <INCLUSION_PROPERTY> <TRACE_FILE>
+2. java sim_cache <BLOCKSIZE> <L1_SIZE> <L1_ASSOC> <L2_SIZE> <L2_ASSOC> <REPLACEMENT_POLICY> <INCLUSION_PROPERTY> <TRACE_FILE>
 
-HW Example: .\sim_cache 32 8192 4 262144 8 0 0 traces\gcc_trace.txt 
-Test: .\sim_cache 1 16 4 32 4 0 0 traces\test_trace.txt
+Debug: java sim_cache 16 1024 2 0 0 0 0 traces\gcc_trace.txt 
+Test: java sim_cache 1 16 4 32 4 0 0 traces\test_trace.txt
 
 
 
-# TODO
-Add "dirty" block (idk what that means but its in the validation txt)
-Fix count not updating
+## TODO
 PDF report
 
 
 
-# Policies
+## Policies
 Replacement:
 - LRU (0): Replace block that was least recently touched.
 - FIFO (1): Replace block that was placed first in cache.
@@ -26,7 +24,7 @@ Inclusion:
 
 
 
-# Requirements
+## Requirements
 The output from your simulator includes the memory hierarchy
 configuration and trace filename, the final contents of all caches, and all
 required measurements.

@@ -5,18 +5,17 @@ public class Block {
 	boolean valid;
 	boolean dirty;
 
-	public Block(String adr, String t, int c) {
-		address = adr;
+	public Block(String adr, String t, int c, boolean d) {
+		address = Long.toHexString((Long.parseLong(adr, 16) / 16) * 16);
 		tag = t;
 		count = c;
 		valid = true;
-		dirty = true;
+		dirty = d;
 	}
 
 	public void inc() { count++; }
 	public void setCount(int c) { count = c; }
-	public void toggleDirty() { dirty = !dirty; }
-	String blockString() {
-		return address + " " + (dirty ? "D" : " ") + " " + count;
+	String[] blockString() {
+		return new String[]{tag, (dirty ? "D" : " "), String.valueOf(count)};
 	}
 }

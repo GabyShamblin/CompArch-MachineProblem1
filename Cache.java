@@ -3,25 +3,54 @@ public class Cache {
 	int blocksize = 0;
 	int numSets = 0;
 	int assoc = 0;
+	String name = "";
+	Cache lower = null;
+	String victim = "";
 
 	int tagBits = 0;
 	int indexBits = 0;
 	int offsetBits = 0;
-	boolean isFull = false;
+	int replace = 0;
 
-	public Cache(int b, int s, int a) {
+	int reads = 0;
+	int readMiss = 0;
+	int writes = 0;
+	int writeMiss = 0;
+	int writebacks = 0;
+	int mainTraffic = 0;
+
+	public Cache(int b, int s, int a, int r, String n, Cache c) {
 		blocks = new Block[s][a];
 		blocksize = b;
 		numSets = s;
 		assoc = a;
+		name = n;
+		lower = c;
+		replace = r;
 		indexBits = (int)(Math.log(numSets) / Math.log(2));
 		offsetBits = (int)(Math.log(blocksize) / Math.log(2));
 		tagBits = 32 - (indexBits + offsetBits);
 	}
 
-	// Static = a function that can be accessed without the object
-	// Non-static = Only accessed by objects
+	public Cache(int b, int s, int a, int r, String n) {
+		blocks = new Block[s][a];
+		blocksize = b;
+		numSets = s;
+		assoc = a;
+		name = n;
+		replace = r;
+		indexBits = (int)(Math.log(numSets) / Math.log(2));
+		offsetBits = (int)(Math.log(blocksize) / Math.log(2));
+		tagBits = 32 - (indexBits + offsetBits);
+	}
 
+	// Simplifies the address for storage
+	String getAddress(String adr) {
+		return Long.toHexString((Long.parseLong(adr, 16) / 16) * 16);
+	}
+	String printAddress(String adr) {
+		return getAddress(adr) + " (tag " + getTag(adr) + ", index " + getIndex(adr) + ")";
+	}
 	// Used to lookup the address
 	String getTag(String adr) {
 		return Long.toHexString((Long.parseLong(adr, 16) >> (offsetBits + indexBits)));
@@ -31,42 +60,274 @@ public class Cache {
 		return (int)((Long.parseLong(adr, 16) >> offsetBits) & (numSets - 1));
 	}
 
+	// Is the set full
 	boolean setFull(String adr) {
 		int n = getIndex(adr);
 		if (n > blocks.length) { return true; }
-		isFull = true;
+		boolean isFull = true;
 		for (int i = 0; i < blocks[n].length; i++) {
 			if (blocks[n][i] == null) { 
-				isFull = false;
+				isFull = false; break;
 			}
 		}
 		return isFull;
 	}
 
-	public int[] find(String adr) {
+	// Find where a block is located
+	public int find(String adr) {
 		int n = getIndex(adr);
 		String t = getTag(adr);
-		if (n <= blocks.length) {
-			System.out.print("(tag " + t + ", index " + n + ") ");
-		}
-		if (n > blocks.length || blocks[n] == null) { return new int[]{-1, -1}; }
+		if (n > blocks.length || blocks[n] == null) { return -1; }
 		for (int i = 0; i < blocks[n].length; i++) {
 			if (blocks[n][i] == null) { continue; }
-			else if (blocks[n][i].tag.equals(t)) { return new int[]{n, i}; }
+			else if (blocks[n][i].tag.equals(t)) { return i; }
 		}
-		return new int[]{-1, -1};
+		return -1;
 	}
 
-	public void insert(String adr, int c) {
+	// Insert a block or update a found block
+	public void allocate(String adr, boolean dirty) {
+		int found = find(adr);
 		int n = getIndex(adr);
+		int v = -1;
+		if (n > blocks.length) { return; }
+		if (dirty) {
+			System.out.println(name + " set dirty");
+		}
+		if (found != -1) {
+			blocks[n][found].count = 0;
+			blocks[n][found].dirty = dirty;
+			return;
+		}
+		// Look for empty block
 		for (int i = 0; i < blocks[n].length; i++) {
-			if (blocks[n][i] == null) { blocks[n][i] = new Block(adr, getTag(adr), c); break; }
+			if (blocks[n][i] == null) { 
+				blocks[n][i] = new Block(adr, getTag(adr), 0, dirty); 
+				return; 
+			}
+		}
+		int largest = 0;
+		int index = 0;
+		// Look for a block to override
+		for (int i = 0; i < blocks[n].length; i++) {
+			if (!blocks[n][i].valid) { 
+				System.out.println(name + " victim : " + printAddress(blocks[n][i].address) + ", clean");
+				blocks[n][i] = new Block(adr, getTag(adr), 0, dirty); 
+				return; 
+			}
+			// if (blocks[n][i].dirty && v == -1) { 
+			// 	v = i;
+			// }
+			if (blocks[n][i].count > largest) {
+				largest = blocks[n][i].count;
+				index = i;
+			}
+		}
+
+		// if (v != -1) {
+		// 	victim = blocks[n][v].address;
+		// 	System.out.println(name + " victim : " + printAddress(blocks[n][v].address) + ", dirty");
+		// 	blocks[n][v] = new Block(adr, getTag(adr), 0, dirty); 
+		// 	writebacks++;
+		// } else {
+		if (blocks[n][index].dirty) {
+			victim = blocks[n][index].address;
+			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", dirty");
+			writebacks++;
+		} else {
+			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", clean");
+		}
+		blocks[n][index] = new Block(adr, getTag(adr), 0, dirty);
+	}
+
+	// Insert a block with a preset count (for optimal)
+	public void allocate(String adr, int newCount, boolean dirty) {
+		int found = find(adr);
+		int n = getIndex(adr);
+		int v = -1;
+		if (n > blocks.length) { return; }
+		if (dirty) {
+			System.out.println(name + " set dirty");
+		}
+		if (found != -1) {
+			blocks[n][found].count = newCount;
+			blocks[n][found].dirty = dirty;
+			return;
+		}
+		// Look for empty block
+		for (int i = 0; i < blocks[n].length; i++) {
+			if (blocks[n][i] == null) { 
+				blocks[n][i] = new Block(adr, getTag(adr), newCount, dirty); 
+				return; 
+			}
+		}
+		int largest = 0;
+		int index = 0;
+		// Look for a block to override
+		for (int i = 0; i < blocks[n].length; i++) {
+			if (!blocks[n][i].valid) { 
+				System.out.println(name + " victim : " + printAddress(blocks[n][i].address) + ", clean");
+				blocks[n][i] = new Block(adr, getTag(adr), newCount, dirty); 
+				return; 
+			}
+			// if (blocks[n][i].dirty && v == -1) { 
+			// 	v = i;
+			// }
+			if (blocks[n][i].count > largest) {
+				largest = blocks[n][i].count;
+				index = i;
+			}
+		}
+
+		// if (v != -1) {
+		// 	victim = blocks[n][v].address;
+		// 	System.out.println(name + " victim : " + printAddress(blocks[n][v].address) + ", dirty");
+		// 	blocks[n][v] = new Block(adr, getTag(adr), newCount, dirty);
+		// 	writebacks++;
+		// } else {
+		if (blocks[n][index].dirty) {
+			victim = blocks[n][index].address;
+			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", dirty");
+			writebacks++;
+		} else {
+			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", clean");
+		}
+		blocks[n][index] = new Block(adr, getTag(adr), newCount, dirty);
+	}
+
+	// If cache is inclusive and block is valid, then we can invalidate it in the upper level
+	public void invalidate(String adr) {
+		int i = find(adr);
+		if (i == -1) { 
+			int n = getIndex(adr);
+			if (blocks[n][i].dirty) {
+				mainTraffic++;
+				blocks[n][i].dirty = false;
+			}
+			blocks[n][i].valid = false;
 		}
 	}
 
-	public void replace(String newAdr, String oldAdr) {
-		int[] found = find(oldAdr);
-		if (found[0] == -1) { return; }
-		blocks[found[0]][found[1]] = new Block(newAdr, getTag(newAdr), 0);
+	// Replace a block
+	public void replace(String adr, String oldTag, boolean dirty) {
+		int n = getIndex(adr);
+		if (n > blocks.length) { return; }
+		for (int i = 0; i < blocks[n].length; i++) {
+			if (blocks[n][i].tag == oldTag) { 
+				blocks[n][i] = new Block(adr, getTag(adr), 0, dirty); 
+				return; 
+			}
+		}
+	}
+
+	public void updateCount(String adr) {
+		System.out.println(name + " update LRU");
+		int found = find(adr);
+		int n = getIndex(adr);
+		int threshold = found != -1 ? blocks[n][found].count : Integer.MAX_VALUE;
+		for (int i = 0; i < blocks.length; i++) {
+			for (int j = 0; j < blocks[i].length; j++) {
+				if (blocks[i][j] != null && blocks[i][j].count < threshold) {
+					blocks[i][j].inc();
+				}
+			}
+		}
+	}
+
+	// LRU & FIFO read
+	public boolean read(String adr) {
+		reads++;
+		System.out.println(name + " read : " + printAddress(adr));
+
+		int found = find(adr);
+		int n = getIndex(adr);
+		if (found != -1 && n < numSets) {
+			if (replace == 0 && blocks[n][found].count != 0) {
+				// Don't increase any block with a check above that of the current block
+				// Stops check from going above current amount of total amount of blocks in the cache
+				int threshold = blocks[n][found].count;
+				for (int i = 0; i < blocks.length; i++) {
+					for (int j = 0; j < blocks[i].length; j++) {
+						if (blocks[i][j] != null && blocks[i][j].count < threshold) {
+							blocks[i][j].inc();
+						}
+					}
+				}
+				blocks[n][found].setCount(0);
+			}
+			System.out.println(name + " hit");
+			blocks[n][found].dirty = false;
+			return true;
+		} else if (numSets > 0) { 
+			System.out.println(name + " miss");
+			// allocate(adr, false);
+			readMiss++;
+		}
+		return false; 
+	}
+
+	// Optimal read
+	public boolean read(String adr, int opt) {
+		reads++;
+		System.out.println(name + " read : " + printAddress(adr));
+
+		int found = find(adr);
+		int n = getIndex(adr);
+		if (found != -1) {
+			blocks[n][found].setCount(opt);
+			blocks[n][found].dirty = false;
+			System.out.println(name + " hit");
+			return true;
+		} else if (numSets > 0) {
+			System.out.println(name + " miss"); 
+			allocate(adr, false);
+			readMiss++;
+		}
+		return false; 
+	}
+
+	// LRU && FIFO read
+	public boolean write(String adr) {
+		writes++;
+		System.out.println(name + " write : " + printAddress(adr));
+
+		int found = find(adr);
+		int n = getIndex(adr);
+		if (n < numSets) {
+			// Don't increase any block with a check above that of the current block
+			// Stops check from going above current amount of total amount of blocks in the cache
+			updateCount(adr);
+			allocate(adr, true);;
+			if (found != -1) { 
+				System.out.println(name + " hit"); 
+				blocks[n][found].dirty = true;
+				return true; 
+			} else { 
+				System.out.println(name + " miss"); 
+				writeMiss++; 
+				return false; 
+			}
+		}
+		return false;
+	}
+
+	// Optimal write
+	public boolean write(String adr, int opt) {
+		writes++;
+		System.out.println(name + " write : " + printAddress(adr));
+
+		int found = find(adr);
+		if (getIndex(adr) < numSets) {
+			allocate(adr, opt, true);;
+			if (found != -1) { 
+				System.out.println(name + " hit"); 
+				return true; 
+			} else { 
+				System.out.println(name + " miss"); 
+				writeMiss++; 
+				return false; 
+			}
+		}
+		return false;
 	}
 }

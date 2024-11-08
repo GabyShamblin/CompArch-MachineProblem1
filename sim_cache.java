@@ -27,11 +27,11 @@ class sim_cache {
 		}
 	
 		System.out.println("===== Simulator configuration =====");
-		System.out.println("BLOCKSIZE:             " + argv[1]);
-		System.out.println("L1_SIZE:               " + argv[2]);
-		System.out.println("L1_ASSOC:              " + argv[3]);
-		System.out.println("L2_SIZE:               " + argv[4]);
-		System.out.println("L2_ASSOC:              " + argv[5]);
+		System.out.println("BLOCKSIZE:             " + argv[0]);
+		System.out.println("L1_SIZE:               " + argv[1]);
+		System.out.println("L1_ASSOC:              " + argv[2]);
+		System.out.println("L2_SIZE:               " + argv[3]);
+		System.out.println("L2_ASSOC:              " + argv[4]);
 		System.out.println("REPLACEMENT POLICY:    " + replace);
 		System.out.println("INCLUSION POLICY:      " + inclusion);
 		System.out.println("trace_file:            " + argv[7]);
@@ -39,14 +39,8 @@ class sim_cache {
 	
 	static void readOperations(String line, int count) {
 		String adr = line.substring(2, line.length());
-		// If length of address is less than 8 bits, add the missing 0s to the beginning
-		if (adr.length() < 8) {
-			for (int i = 0; i <= (8-adr.length()); i++) {
-				adr = '0' + adr;
-			}
-		}
 		System.out.println("----------------------------------------");
-		System.out.print((count+1) + " " + line.charAt(0) + " " + adr + " - ");
+		System.out.println("# " + (count+1) + " : " + line.charAt(0) + " " + adr);
 	
 		if (line.charAt(0) == 'r') {
 			ops.read(adr);
@@ -91,7 +85,8 @@ class sim_cache {
 			Scanner reader = new Scanner(input);
 	
 			String line;
-			int maxCount = 15;
+			int maxCount = Integer.MAX_VALUE;
+			// maxCount = 30;
 			int count = 0;
 	
 			if (replace == 2) {

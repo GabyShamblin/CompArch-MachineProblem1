@@ -19,6 +19,8 @@ public class Cache {
 	int writebacks = 0;
 	int mainTraffic = 0;
 
+	boolean debug = true;
+
 	public Cache(int b, int s, int a, int r, String n, Cache c) {
 		blocks = new Block[s][a];
 		blocksize = b;
@@ -89,16 +91,19 @@ public class Cache {
 	public void allocate(String adr, boolean dirty) {
 		int found = find(adr);
 		int n = getIndex(adr);
-		int v = -1;
 		if (n > blocks.length) { return; }
-		if (dirty) {
+		if (debug && dirty) {
 			System.out.println(name + " set dirty");
 		}
 		if (found != -1) {
+			updateCount(blocks[n][found].count);
 			blocks[n][found].count = 0;
-			blocks[n][found].dirty = dirty;
+			if (!blocks[n][found].dirty && dirty) {
+				blocks[n][found].dirty = dirty;
+			}
 			return;
 		}
+		updateCount(Integer.MAX_VALUE);
 		// Look for empty block
 		for (int i = 0; i < blocks[n].length; i++) {
 			if (blocks[n][i] == null) { 
@@ -111,7 +116,7 @@ public class Cache {
 		// Look for a block to override
 		for (int i = 0; i < blocks[n].length; i++) {
 			if (!blocks[n][i].valid) { 
-				System.out.println(name + " victim : " + printAddress(blocks[n][i].address) + ", clean");
+				if (debug) { System.out.println(name + " victim : " + printAddress(blocks[n][i].address) + ", clean"); }
 				blocks[n][i] = new Block(adr, getTag(adr), 0, dirty); 
 				return; 
 			}
@@ -124,29 +129,23 @@ public class Cache {
 			}
 		}
 
-		// if (v != -1) {
-		// 	victim = blocks[n][v].address;
-		// 	System.out.println(name + " victim : " + printAddress(blocks[n][v].address) + ", dirty");
-		// 	blocks[n][v] = new Block(adr, getTag(adr), 0, dirty); 
-		// 	writebacks++;
-		// } else {
 		if (blocks[n][index].dirty) {
 			victim = blocks[n][index].address;
-			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", dirty");
+			if (debug) { System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", dirty"); }
 			writebacks++;
-		} else {
-			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", clean");
-		}
+		} 
+		else if (debug) { System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", clean"); }
+
 		blocks[n][index] = new Block(adr, getTag(adr), 0, dirty);
 	}
 
 	// Insert a block with a preset count (for optimal)
 	public void allocate(String adr, int newCount, boolean dirty) {
+		if (debug) { System.out.println(name + " update optimal"); }
 		int found = find(adr);
 		int n = getIndex(adr);
-		int v = -1;
 		if (n > blocks.length) { return; }
-		if (dirty) {
+		if (debug && dirty) {
 			System.out.println(name + " set dirty");
 		}
 		if (found != -1) {
@@ -166,44 +165,42 @@ public class Cache {
 		// Look for a block to override
 		for (int i = 0; i < blocks[n].length; i++) {
 			if (!blocks[n][i].valid) { 
-				System.out.println(name + " victim : " + printAddress(blocks[n][i].address) + ", clean");
+				if (debug) { System.out.println(name + " victim : " + printAddress(blocks[n][i].address) + ", clean"); }
 				blocks[n][i] = new Block(adr, getTag(adr), newCount, dirty); 
 				return; 
 			}
-			// if (blocks[n][i].dirty && v == -1) { 
-			// 	v = i;
-			// }
 			if (blocks[n][i].count > largest) {
 				largest = blocks[n][i].count;
 				index = i;
 			}
 		}
 
-		// if (v != -1) {
-		// 	victim = blocks[n][v].address;
-		// 	System.out.println(name + " victim : " + printAddress(blocks[n][v].address) + ", dirty");
-		// 	blocks[n][v] = new Block(adr, getTag(adr), newCount, dirty);
-		// 	writebacks++;
-		// } else {
 		if (blocks[n][index].dirty) {
 			victim = blocks[n][index].address;
-			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", dirty");
+			if (debug) { System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", dirty"); }
 			writebacks++;
-		} else {
-			System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", clean");
-		}
+		} 
+		else if (debug) { System.out.println(name + " victim : " + printAddress(blocks[n][index].address) + ", clean"); }
+
 		blocks[n][index] = new Block(adr, getTag(adr), newCount, dirty);
 	}
 
 	// If cache is inclusive and block is valid, then we can invalidate it in the upper level
 	public void invalidate(String adr) {
 		int i = find(adr);
-		if (i == -1) { 
+		if (i != -1) { 
 			int n = getIndex(adr);
+			if (debug) { System.out.print(name + " invalidated: " + printAddress(blocks[n][i].address)); }
 			if (blocks[n][i].dirty) {
 				mainTraffic++;
 				blocks[n][i].dirty = false;
-			}
+				if (debug) {
+					System.out.println(", dirty");
+					System.out.println(name + " writeback to main memory directly");
+				}
+			} 
+			else if (debug) { System.out.println(", clean"); }
+			
 			blocks[n][i].valid = false;
 		}
 	}
@@ -213,15 +210,19 @@ public class Cache {
 		int n = getIndex(adr);
 		if (n > blocks.length) { return; }
 		for (int i = 0; i < blocks[n].length; i++) {
-			if (blocks[n][i].tag == oldTag) { 
+			if (blocks[n][i] != null && blocks[n][i].tag == oldTag) { 
 				blocks[n][i] = new Block(adr, getTag(adr), 0, dirty); 
 				return; 
 			}
 		}
 	}
 
+	// Increase the count of every block by 1
 	public void updateCount(String adr) {
-		System.out.println(name + " update LRU");
+		if (debug) {
+			if (replace == 0) { System.out.println(name + " update LRU"); }
+			else if (replace == 1) { System.out.println(name + " update FIFO"); }
+		}
 		int found = find(adr);
 		int n = getIndex(adr);
 		int threshold = found != -1 ? blocks[n][found].count : Integer.MAX_VALUE;
@@ -234,32 +235,39 @@ public class Cache {
 		}
 	}
 
+	// Increase the count of every block by 1
+	public void updateCount(int threshold) {
+		if (debug) {
+			if (replace == 0) { System.out.println(name + " update LRU"); }
+			else if (replace == 1) { System.out.println(name + " update FIFO"); }
+		}
+		// Don't increase any block with a check above that of the current block
+		// Stops check from going above current amount of total amount of blocks in the cache
+		for (int i = 0; i < blocks.length; i++) {
+			for (int j = 0; j < blocks[i].length; j++) {
+				if (blocks[i][j] != null && blocks[i][j].count < threshold) {
+					blocks[i][j].inc();
+				}
+			}
+		}
+	}
+
 	// LRU & FIFO read
 	public boolean read(String adr) {
 		reads++;
-		System.out.println(name + " read : " + printAddress(adr));
+		if (debug) { System.out.println(name + " read : " + printAddress(adr)); }
 
 		int found = find(adr);
 		int n = getIndex(adr);
 		if (found != -1 && n < numSets) {
-			if (replace == 0 && blocks[n][found].count != 0) {
-				// Don't increase any block with a check above that of the current block
-				// Stops check from going above current amount of total amount of blocks in the cache
-				int threshold = blocks[n][found].count;
-				for (int i = 0; i < blocks.length; i++) {
-					for (int j = 0; j < blocks[i].length; j++) {
-						if (blocks[i][j] != null && blocks[i][j].count < threshold) {
-							blocks[i][j].inc();
-						}
-					}
-				}
+			if (debug) { System.out.println(name + " read hit"); }
+			if (replace == 0) {
+				updateCount(blocks[n][found].count);
 				blocks[n][found].setCount(0);
 			}
-			System.out.println(name + " hit");
-			blocks[n][found].dirty = false;
 			return true;
 		} else if (numSets > 0) { 
-			System.out.println(name + " miss");
+			if (debug) { System.out.println(name + " read miss"); }
 			// allocate(adr, false);
 			readMiss++;
 		}
@@ -269,17 +277,17 @@ public class Cache {
 	// Optimal read
 	public boolean read(String adr, int opt) {
 		reads++;
-		System.out.println(name + " read : " + printAddress(adr));
+		if (debug) { System.out.println(name + " read : " + printAddress(adr)); }
 
 		int found = find(adr);
 		int n = getIndex(adr);
 		if (found != -1) {
+			if (debug) { System.out.println(name + " read hit"); }
 			blocks[n][found].setCount(opt);
 			blocks[n][found].dirty = false;
-			System.out.println(name + " hit");
 			return true;
 		} else if (numSets > 0) {
-			System.out.println(name + " miss"); 
+			if (debug) { System.out.println(name + " read miss"); }
 			allocate(adr, false);
 			readMiss++;
 		}
@@ -289,24 +297,18 @@ public class Cache {
 	// LRU && FIFO read
 	public boolean write(String adr) {
 		writes++;
-		System.out.println(name + " write : " + printAddress(adr));
+		if (debug) { System.out.println(name + " write : " + printAddress(adr)); }
 
 		int found = find(adr);
 		int n = getIndex(adr);
 		if (n < numSets) {
-			// Don't increase any block with a check above that of the current block
-			// Stops check from going above current amount of total amount of blocks in the cache
-			updateCount(adr);
-			allocate(adr, true);;
-			if (found != -1) { 
-				System.out.println(name + " hit"); 
-				blocks[n][found].dirty = true;
-				return true; 
-			} else { 
-				System.out.println(name + " miss"); 
-				writeMiss++; 
-				return false; 
+			if (debug) {
+				if (found != -1) { System.out.println(name + " write hit"); } 
+				else { System.out.println(name + " write miss"); }
 			}
+			allocate(adr, true);;
+			if (found != -1) { return true; } 
+			else { writeMiss++; return false; }
 		}
 		return false;
 	}
@@ -314,16 +316,16 @@ public class Cache {
 	// Optimal write
 	public boolean write(String adr, int opt) {
 		writes++;
-		System.out.println(name + " write : " + printAddress(adr));
+		if (debug) { System.out.println(name + " write : " + printAddress(adr)); }
 
 		int found = find(adr);
 		if (getIndex(adr) < numSets) {
 			allocate(adr, opt, true);;
 			if (found != -1) { 
-				System.out.println(name + " hit"); 
+				if (debug) { System.out.println(name + " write hit"); }
 				return true; 
 			} else { 
-				System.out.println(name + " miss"); 
+				if (debug) { System.out.println(name + " write miss"); }
 				writeMiss++; 
 				return false; 
 			}

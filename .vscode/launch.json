@@ -16,7 +16,15 @@
 			"request": "launch",
 			"mainClass": "sim_cache",
 			"projectName": "MachineProblem1.2_160a9160",
-			"args": "16 1024 2 8192 4 0 0 traces/gcc_trace.txt",
+			"args": "16 1024 2 0 0 2 0 traces/vortex_trace.txt",
+		},
+		{
+			"type": "java",
+			"name": "Debug 6",
+			"request": "launch",
+			"mainClass": "sim_cache",
+			"projectName": "MachineProblem1.2_160a9160",
+			"args": "16 1024 2 8192 4 0 1 traces/gcc_trace.txt",
 		}
 	]
 }

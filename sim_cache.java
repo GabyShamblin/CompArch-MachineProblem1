@@ -33,7 +33,7 @@ class sim_cache {
 		System.out.println("L2_SIZE:               " + argv[3]);
 		System.out.println("L2_ASSOC:              " + argv[4]);
 		System.out.println("REPLACEMENT POLICY:    " + replace);
-		System.out.println("INCLUSION POLICY:      " + inclusion);
+		System.out.println("INCLUSION PROPERTY:    " + inclusion);
 		System.out.println("trace_file:            " + argv[7]);
 	}
 	
@@ -102,7 +102,7 @@ class sim_cache {
 	
 			count = 0;
 			// Read inputs line by line (See 5)
-			while (reader.hasNextLine() && count < maxCount) {
+			while (reader.hasNextLine()) {
 				line = reader.nextLine();
 				readOperations(line, count);
 				// ops.outputCaches();
